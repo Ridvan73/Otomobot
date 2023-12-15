@@ -1,0 +1,96 @@
+#data.py
+# Kütüphane ve Modül İçe Aktarmaları
+import speech_recognition as sr  # Ses tanıma için
+import requests  # API istekleri için
+import pyttsx3  # Metin konuşma için
+import geopy  # Coğrafi konum hesaplamaları için
+import pandas as pd  # Veri analizi için
+from sklearn.linear_model import LinearRegression  # Regresyon modeli için
+import nltk  # Doğal dil işleme için
+from nltk.sentiment.vader import SentimentIntensityAnalyzer  # Duygu durum analizi için
+import random  # Rasgele seçim için
+# Bağlantı Bilgileri ve Temel Ayarlar
+api_key = " BO-1234-5678-90AB-CDEF-GHIJ-KLMN-OPQR-STUV-WXYZ " # Borusan Otomotiv API'si için API anahtarı
+base_url = "https://api.borusanotomotiv.com/"  # Borusan Otomotiv API'sinin temel URL'si
+headers = {"Authorization": "Bearer " + api_key}  # API istekleri için başlık bilgileri
+r = sr.Recognizer()  # Ses tanıma motoru
+engine = pyttsx3.init()  # Metin konuşma motoru
+voices = engine.getProperty("voices")  # Sesler
+engine.setProperty("voice", voices[1].id)  # Türkçe ses seçimi
+engine.setProperty("rate", 150)  # Konuşma hızı
+# Kullanıcı Girişi Alma Fonksiyonu
+def get_voice_input():
+    with sr.Microphone() as source:  # Mikrofonu kaynak olarak kullan
+        print("Lütfen konuşun...")
+        audio = r.listen(source)  # Kullanıcının sesini dinle
+        try:
+            voice_input = r.recognize_google(audio, language="tr-TR")  # Sesli girişi Google Konuşma Tanıma API'sini kullanarak metne çevir
+            print("Söylediğiniz: " + voice_input)
+            return voice_input  # Sesli girişi metin olarak döndür
+        except sr.UnknownValueError:  # Sesli giriş anlaşılamazsa
+            print("Sizi anlayamadım, lütfen tekrar edin.")
+            return get_voice_input()  # Fonksiyonu tekrar çağır
+# Bot Cevabını Sesli ve Metin Olarak Gönderme Fonksiyonu
+def speak_response(response):
+    print("Bot: " + response)  # Botun cevabını ekrana yazdır
+    engine.say(response)  # Botun cevabını sesli olarak söyle
+    engine.runAndWait()  # Konuşmayı bitir
+# Kullanıcının Mevcut Konumunu Alma Fonksiyonu
+def get_current_location():
+    ip_request = requests.get("https://get.geojs.io/v1/ip.json")  # IP adresini almak için bir istek gönder
+    ip = ip_request.json()["ip"]  # IP adresini JSON formatından çıkar
+    geo_request = requests.get("https://get.geojs.io/v1/ip/geo/" + ip + ".json")  # Coğrafi konum bilgilerini almak için bir istek gönder
+    geo_data = geo_request.json()  # Coğrafi konum bilgilerini JSON formatından çıkar
+    latitude = geo_data["latitude"]  # Enlem bilgisini al
+    longitude = geo_data["longitude"]  # Boylam bilgisini al
+    city = geo_data["city"]  # Şehir bilgisini al
+    return latitude, longitude, city  # Enlem, boylam ve şehir bilgilerini döndür
+# En Yakın Akaryakıt İstasyonlarını Bulma Fonksiyonu
+def get_nearest_gas_stations(latitude, longitude):
+    gas_url = base_url + "gasstations"  # Akaryakıt istasyonları için API URL'si
+    gas_params = {"lat": latitude, "lon": longitude}  # API parametreleri
+    gas_response = requests.get(gas_url, headers=headers, params=gas_params)  # API isteği gönder
+    gas_data = gas_response.json()  # API cevabını JSON formatından çıkar
+    gas_stations = gas_data["gasStations"]  # Akaryakıt istasyonlarının listesini al
+    gas_stations_df = pd.DataFrame(gas_stations)  # Akaryakıt istasyonlarının listesini bir veri çerçevesine dönüştür
+    gas_stations_df = gas_stations_df[["name", "distance", "price", "open"]]  # Sadece ilgili sütunları al
+    gas_stations_df = gas_stations_df.sort_values(by="distance")  # Mesafeye göre sırala
+    gas_stations_df = gas_stations_df.head(5)  # İlk 5 akaryakıt istasyonunu al
+    return gas_stations_df  # Akaryakıt istasyonlarının veri çerçevesini döndür
+# En Yakın Servis Merkezini Bulma Fonksiyonu
+def get_nearest_service_center(latitude, longitude):
+    service_url = base_url + "servicecenters"  # Servis merkezleri için API URL'si
+    service_params = {"lat": latitude, "lon": longitude}  # API parametreleri
+    service_response = requests.get(service_url, headers=headers, params=service_params)  # API isteği gönder
+    service_data = service_response.json()  # API cevabını JSON formatından çıkar
+    service_centers = service_data["serviceCenters"]  # Servis merkezlerinin listesini al
+    service_centers_df = pd.DataFrame(service_centers)  # Servis merkezlerinin listesini bir veri çerçevesine dönüştür
+    service_centers_df = service_centers_df[["name", "distance", "address", "phone"]]  # Sadece ilgili sütunları al
+    service_centers_df = service_centers_df.sort_values(by="distance")  # Mesafeye göre sırala
+    service_centers_df = service_centers_df.head(1)  # En yakın servis merkezini al
+    return service_centers_df  # Servis merkezinin veri çerçevesini döndür
+# Sürüş Verilerini Açıklama Fonksiyonu
+def explain_driving_data():
+    driving_data = pd.read_csv("driving_data.csv")  # Sürüş verilerini bir CSV dosyasından oku
+    X = driving_data[["speed", "braking", "fuel"]]  # Bağımsız değişkenler
+    y = driving_data["score"]  # Bağımlı değişken
+    model = LinearRegression()  # Regresyon modeli oluştur
+    model.fit(X, y)  # Modeli verilere uydur
+    score = model.predict([[80, 5, 8]])  # Kullanıcının sürüş verilerine göre bir skor tahmin et
+    score = round(score[0], 2)  # Skoru yuvarla
+    coefficients = model.coef_  # Modelin katsayılarını al
+    intercept = model.intercept_  # Modelin sabit terimini al
+    explanation = f"Sürüş performansınızı değerlendirmek için bir regresyon modeli kullandım. Bu model, sürüş hızınız, frenleme sıklığınız ve yakıt tüketiminiz gibi faktörlere göre sürüşünüzü bir skorla ifade ediyor. Modelin formülü şöyle: score = {intercept} + {coefficients[0]} * speed + {coefficients[1]} * braking + {coefficients[2]} * fuel. Bu formüle göre, sürüş skorunuz {score} olarak hesaplandı. Bu skor, 0 ile 100 arasında bir değerdir. Skorunuz ne kadar yüksekse, sürüşünüz o kadar iyi demektir. Skorunuzu artırmak için, sürüş hızınızı azaltmanız, frenleme sıklığınızı düşürmeniz ve yakıt tüketiminizi optimize etmeniz gerekiyor."  # Modeli ve skoru açıklayan bir metin oluştur
+    return explanation
+# Duygu Durumunu Anlama Fonksiyonu
+def understand_emotion(input):
+    sia = SentimentIntensityAnalyzer()  # Duygu durum analizi için bir nesne oluştur
+    polarity_scores = sia.polarity_scores(input)  # Girişin duygu durum puanlarını hesapla
+    compound_score = polarity_scores["compound"]  # Bileşik puanı al
+    if compound_score >= 0.05:  # Bileşik puan 0.05 veya daha büyükse
+        emotion = "pozitif"  # Duygu durumu pozitif
+    elif compound_score <= -0.05:  # Bileşik puan -0.05 veya daha küçükse
+        emotion = "negatif"  # Duygu durumu negatif
+    else:  # Bileşik puan arada ise
+        emotion = "nötr"  # Duygu durumu nötr
+    return emotion  # Duygu durumunu döndür
