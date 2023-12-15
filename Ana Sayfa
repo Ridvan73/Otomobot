@@ -1,0 +1,398 @@
+import speech_recognition as sr
+import requests
+import json
+import pyttsx3
+import geopy
+import geopy.distance
+import pandas as pd
+from sklearn import *  # Use specific imports instead of '*'
+import nltk
+import random
+# Initialize the speech recognizer
+r = sr.Recognizer()
+# Initialize the text-to-speech engine
+engine = pyttsx3.init()
+engine.setProperty('rate', 150)
+engine.setProperty('voice', 'turkish')
+# Define the API key for Borusan Otomotive
+api_key = "BO-1234-5678-90AB-CDEF-GHIJ-KLMN-OPQR-STUV-WXYZ"
+# Define the base URL for Borusan Otomotive
+base_url = "https://api.borusanotomotiv.com/"
+# Define the headers for Borusan Otomotive
+headers = {
+    "Authorization": "Bearer " + api_key,
+    "Content-Type": "application/json"
+}
+# Define a function to get the user's voice input
+def get_voice_input():
+    # Use the default microphone as the audio source
+    with sr.Microphone() as source:
+        # Listen for the user's voice input
+        print("Sizi dinliyorum...")
+        audio = r.listen(source)
+        # Try to recognize the user's voice input
+        try:
+            # Use Google Speech Recognition to convert the audio to text
+            text = r.recognize_google(audio, language="tr-TR")
+            # Return the text
+            return text
+        # If the speech recognition failed
+        except:
+            # Return an empty string
+            return ""
+# Define a function to speak the chatbot's response
+def speak_response(response):
+    # Print the response
+    print(response)
+    # Speak the response
+    engine.say(response)
+    engine.runAndWait()
+# Define a function to get the current location of the user
+def get_current_location():
+    # Use the IP address of the user to get the geolocation
+    response = requests.get("https://benneredeyim.com/json")
+    # Parse the JSON data
+    data = response.json()
+    # Get the latitude and longitude
+    lat = data["lat"]
+    lon = data["lon"]
+    # Return the latitude and longitude as a tuple
+    return (lat, lon)
+# Define a function to get the nearest gas stations
+def get_nearest_gas_stations():
+    # Get the current location of the user
+    current_location = get_current_location()
+    # Define the parameters for the gas station search
+    params = {
+        "lat": current_location[0],
+        "lon": current_location[1],
+        "radius": 10, # Search within 10 km radius
+        "type": "gas_station", # Search for gas stations
+        "key": api_key # Use the API key
+    }
+    # Make a request to the Borusan otomotive API
+    response = requests.get(base_url + "places/nearbysearch/json", params=params, headers=headers)
+    # Parse the JSON data
+    data = response.json()
+    # Get the results
+    results = data["results"]
+    # Create an empty list to store the gas stations
+    gas_stations = []
+    # For each result
+    for result in results:
+        # Get the name of the gas station
+        name = result["name"]
+        # Get the location of the gas station
+        location = result["geometry"]["location"]
+        # Get the latitude and longitude of the gas station
+        lat = location["lat"]
+        lon = location["lon"]
+        # Calculate the distance from the current location to the gas station
+        distance = geopy.distance.distance(current_location, (lat, lon)).km
+        # Round the distance to two decimal places
+        distance = round(distance, 2)
+        # Get the price of the gas
+        price = result["price_level"]
+        # Get the opening hours of the gas station
+        opening_hours = result["opening_hours"]
+        # Get the status of the gas station
+        status = opening_hours["open_now"]
+        # Create a dictionary to store the gas station information
+        gas_station = {
+            "name": name,
+            "lat": lat,
+            "lon": lon,
+            "distance": distance,
+            "price": price,
+            "status": status
+        }
+        # Append the gas station to the list
+        gas_stations.append(gas_station)
+    # Return the list of gas stations
+    return gas_stations
+# Define a function to get the nearest service center
+def get_nearest_service_center():
+    # Get the current location of the user
+    current_location = get_current_location()
+    # Define the parameters for the service center search
+    params = {
+        "lat": current_location[0],
+        "lon": current_location[1],
+        "radius": 10,
+        "type": "car_repair",
+        "key": api_key
+    }
+    # Make a request to the Borusan Otomotive API
+    response = requests.get(base_url + "places/nearbysearch/json", params=params, headers=headers)
+    # Parse the JSON data
+    data = response.json()
+    # Get the results
+    results = data["results"]
+    # Create an empty list to store the service centers
+    service_centers = []
+    # For each result
+    for result in results:
+        # Get the name of the service center
+        name = result["name"]
+        # Get the location of the service center
+        location = result["geometry"]["location"]
+        # Get the latitude and longitude of the service center
+        lat = location["lat"]
+        lon = location["lon"]
+        # Calculate the distance from the current location to the service center
+        distance = geopy.distance.distance(current_location, (lat, lon)).km
+        # Round the distance to two decimal places
+        distance = round(distance, 2)
+        # Get the rating of the service center
+        rating = result.get("rating", 0)  # Use .get() to handle cases where rating is not present
+        # Get the opening hours of the service center
+        opening_hours = result.get("opening_hours", {})
+        # Get the status of the service center
+        status = opening_hours.get("open_now", False)
+        # Create a dictionary to store the service center information
+        service_center = {
+            "name": name,
+            "lat": lat,
+            "lon": lon,
+            "distance": distance,
+            "rating": rating,
+            "status": status
+        }
+        # Append the service center to the list
+        service_centers.append(service_center)
+    # Return the list of service centers
+    return service_centers
+# Define a function to explain the driving data
+def explain_driving_data(df, scores):
+    # Create an empty list to store the explanations
+    explanations = []
+    # For each category
+    for category in df.columns:
+        # Get the driving data for the category
+        data = df[category]
+        # Get the score for the category
+        score = scores[category]
+        # Get the average of the data
+        average = data.mean()
+        # Get the maximum of the data
+        maximum = data.max()
+        # Get the minimum of the data
+        minimum = data.min()
+        # Get the standard deviation of the data
+        std = data.std()
+        # Get the 90th percentile of the data
+        percentile_90 = data.quantile(0.9)
+        # Define the thresholds for each category
+        # For example, we can use the following thresholds: speed (80 km/h), braking (5 times), fuel consumption (10 liters), traffic rules (0 violations)
+        # Adjust the thresholds according to the driving conditions and preferences
+        thresholds = {
+            "speed": 80,
+            "braking": 5,
+            "fuel_consumption": 10,
+            "traffic_rules": 0
+        }
+        # Get the threshold for the category
+        threshold = thresholds[category]
+        # Create an empty string to store the explanation
+        explanation = ""
+        # Add the category name to the explanation
+        explanation += f"{category.capitalize()} kategorisinde "
+        # Compare the average with the threshold and add the explanation accordingly
+        # For example, we can use the following sentences: 
+        # - "ortalamanız eşik değerin altında, bu çok iyi."
+        # - "ortalamanız eşik değere yakın, bu iyi."
+        # - "ortalamanız eşik değerin üstünde, bu kötü."
+        if average < threshold:
+            explanation += f"ortalamanız {average} eşik değerin {threshold} altında, bu çok iyi. "
+        elif average == threshold:
+            explanation += f"ortalamanız {average} eşik değere eşit, bu iyi. "
+        elif average > threshold:
+            explanation += f"ortalamanız {average} eşik değerin {threshold} üstünde, bu kötü. "
+        # Compare the maximum with the threshold and add the explanation accordingly
+        # For example, we can use the following sentences: 
+        # - "maksimumunuz eşik değerin altında, bu çok iyi."
+        # - "maksimumunuz eşik değere yakın, bu iyi."
+        # - "maksimumunuz eşik değerin üstünde, bu kötü."
+        if maximum < threshold:
+            explanation += f"Maksimumunuz {maximum} eşik değerin {threshold} altında, bu çok iyi. "
+        elif maximum == threshold:
+            explanation += f"Maksimumunuz {maximum} eşik değere eşit, bu iyi. "
+        elif maximum > threshold:
+            explanation += f"Maksimumunuz {maximum} eşik değerin {threshold} üstünde, bu kötü. "
+        # Compare the minimum with the threshold and add the explanation accordingly
+        # For example, we can use the following sentences: 
+        # - "minimumunuz eşik değerin altında, bu çok iyi."
+        # - "minimumunuz eşik değere yakın, bu iyi."
+        # - "minimumunuz eşik değerin üstünde, bu kötü."
+        if minimum < threshold:
+            explanation += f"Minimumunuz {minimum} eşik değerin {threshold} altında, bu çok iyi. "
+        elif minimum == threshold:
+            explanation += f"Minimumunuz {minimum} eşik değere eşit, bu iyi. "
+        elif minimum > threshold:
+            explanation += f"Minimumunuz {minimum} eşik değerin {threshold} üstünde, bu kötü. "
+        # Compare the standard deviation with the threshold and add the explanation accordingly
+        # For example, we can use the following sentences: 
+        # - "standart sapmanız eşik değerin altında, bu çok iyi."
+        # - "standart sapmanız eşik değere yakın, bu iyi."
+        # - "standart sapmanız eşik değerin üstünde, bu kötü."
+        if std < threshold:
+            explanation += f"Standart sapmanız {std} eşik değerin {threshold} altında, bu çok iyi. "
+        elif std == threshold:
+            explanation += f"Standart sapmanız {std} eşik değere eşit, bu iyi. "
+        elif std > threshold:
+            explanation += f"Standart sapmanız {std} eşik değerin {threshold} üstünde, bu kötü. "
+        # Compare the 90th percentile with the threshold and add the explanation accordingly
+        # For example, we can use the following sentences: 
+        # - "90. yüzdelik diliminiz eşik değerin altında, bu çok iyi."
+        # - "90. yüzdelik diliminiz eşik değere yakın, bu iyi."
+        # - "90. yüzdelik diliminiz eşik değerin üstünde, bu kötü."
+        if percentile_90 < threshold:
+            explanation += f"90. yüzdelik diliminiz {percentile_90} eşik değerin {threshold} altında, bu çok iyi. "
+        elif percentile_90 == threshold:
+            explanation += f"90. yüzdelik diliminiz {percentile_90} eşik değere eşit, bu iyi. "
+        elif percentile_90 > threshold:
+            explanation += f"90. yüzdelik diliminiz {percentile_90} eşik değerin {threshold} üstünde, bu kötü. "
+        # Add the score to the explanation
+        explanation += f"Puanınız {score} / 100. "
+        # Append the explanation to the list
+        explanations.append(explanation)
+    # Create an empty string to store the feedback
+    feedback = ""
+    # Add the explanations to the feedback
+    for explanation in explanations:
+        feedback += explanation + "\n"
+    # Calculate the total score by summing the scores for each category
+    total_score = sum(scores.values())
+    # Add the total score to the feedback
+    feedback += f"Toplam puanınız {total_score} / 400. "
+    # Evaluate and advise the user based on the total score
+    # For example, we can use the following sentences: 
+    # - "Sürüş performansınız mükemmel, tebrikler!"
+    # - "Sürüş performansınız iyi, devam edin!"
+    # - "Sürüş performansınız orta, bazı alanlarda iyileştirme yapabilirsiniz."
+    # - "Sürüş performansınız kötü, çok dikkatli olmalısınız."
+    if total_score >= 300:
+        feedback += "Sürüş performansınız mükemmel, tebrikler!"
+    elif total_score >= 200:
+        feedback += "Sürüş performansınız iyi, devam edin!"
+    elif total_score >= 100:
+        feedback += "Sürüş performansınız orta, bazı alanlarda iyileştirme yapabilirsiniz."
+    elif total_score < 100:
+        feedback += "Sürüş performansınız kötü, çok dikkatli olmalısınız."
+    # Return the feedback
+    return feedback
+# Define a function to understand the emotion
+def understand_emotion():
+    # Get the user's voice or text input
+    input_type = input("Sesli mi yazılı mı girdi yapmak istersiniz? (S/Y): ")
+    if input_type == "S":
+        # Use the get_voice_input function to get the user's voice input
+        user_input = get_voice_input()
+    elif input_type == "Y":
+        # Use the input function to get the user's text input
+        user_input = input("Lütfen duygularınızı paylaşın: ")
+    else:
+        # Return an error message if the input type is invalid
+        return "Lütfen geçerli bir girdi türü seçin."
+    # Analyze the user's input using natural language processing techniques
+    # For example, we can use nltk to tokenize, tag and parse the user's input
+    # Import the nltk library
+    import nltk
+    # Download the required resources
+    nltk.download("punkt")
+    nltk.download("averaged_perceptron_tagger")
+    nltk.download("universal_tagset")
+    nltk.download("vader_lexicon")
+    # Tokenize the user's input
+    tokens = nltk.word_tokenize(user_input)
+    # Tag the tokens with part-of-speech tags
+    tags = nltk.pos_tag(tokens, tagset="universal")
+    # Print the tags
+    print(tags)
+    # Parse the user's input using a grammar
+    # Define a grammar
+    grammar = nltk.CFG.fromstring("""
+    S -> NP VP
+    NP -> Det N | N | PRP
+    VP -> V NP | V | V ADJP
+    ADJP -> Adj | Adv Adj
+    Det -> 'bir' | 'bu' | 'o'
+    N -> 'gün' | 'hayat' | 'iş' | 'aile' | 'arkadaş' | 'sevgili'
+    V -> 'geçiyor' | 'gidiyor' | 'yaşıyorum' | 'çalışıyorum' | 'seviyorum' | 'üzülüyorum' | 'kızıyorum' | 'kaygılanıyorum'
+    Adj -> 'güzel' | 'kötü' | 'zor' | 'mutlu' | 'üzgün' | 'sinirli' | 'kaygılı'
+    Adv -> 'çok' | 'pek' | 'hiç'
+    PRP -> 'ben' | 'sen' | 'o' | 'biz' | 'siz' | 'onlar'
+    """)
+    # Create a parser
+    parser = nltk.ChartParser(grammar)
+    # Parse the user's input
+    trees = parser.parse(tokens)
+    # Print the parse trees
+    for tree in trees:
+        print(tree)
+    # Determine the emotion expressions, tone and intensity in the user's input
+    # For example, we can use the nltk.sentiment.vader module to get the sentiment scores of the user's input
+    # Import the SentimentIntensityAnalyzer class
+    from nltk.sentiment.vader import SentimentIntensityAnalyzer
+    # Create an instance of the SentimentIntensityAnalyzer class
+    sia = SentimentIntensityAnalyzer()
+    # Get the sentiment scores of the user's input
+    scores = sia.polarity_scores(user_input)
+    # Print the scores
+    print(scores)
+    # Classify the user's emotion state into a category
+    # For example, we can use the following categories: happy, sad, angry, anxious, neutral
+    # Define a function to get the emotion category from the sentiment scores
+    def get_emotion_category(scores):
+        # Get the compound score
+        compound = scores["compound"]
+        # Compare the compound score with the thresholds and return the emotion category accordingly
+        # For example, we can use the following thresholds: happy (> 0.5), sad (< -0.5), angry (< -0.5 and high negative score), anxious (< -0.5 and high neutral score), neutral (-0.5 < compound < 0.5)
+        # Adjust the thresholds according to the context and preferences
+        if compound > 0.5:
+            return "happy"
+        elif compound < -0.5:
+            # Get the negative score
+            negative = scores["neg"]
+            # Get the neutral score
+            neutral = scores["neu"]
+            # Compare the negative and neutral scores and return the emotion category accordingly
+            # For example, we can use the following rule: angry (negative > 0.5), anxious (neutral > 0.5)
+            # Adjust the rule according to the context and preferences
+            if negative > 0.5:
+                return "angry"
+            elif neutral > 0.5:
+                return "anxious"
+            else:
+                return "sad"
+        else:
+            return "neutral"
+    # Get the emotion category from the sentiment scores
+    emotion_category = get_emotion_category(scores)
+    # Print the emotion category
+    print(emotion_category)
+    # React to the user's emotion state accordingly
+    # For example, we can use the following reactions: console, cheer up, calm down, play music, etc.
+    # Define a function to get the reaction from the emotion category
+    def get_reaction(emotion_category):
+        # Define a dictionary to store the possible reactions for each emotion category
+        # For example, we can use the following reactions: console (sad, angry, anxious), cheer up (sad, anxious), calm down (angry, anxious), play music (happy, sad, angry, anxious), etc.
+        # Add more reactions according to the context and preferences
+        reactions = {
+            "happy": ["Sizi mutlu görmek çok güzel.", "Mutluluğunuz daim olsun.", "Sizinle mutlu oluyorum.", "Bu güzel haberi paylaştığınız için teşekkürler.", "Mutlu olduğunuz bir müzik çalmak ister misiniz?"],
+            "sad": ["Üzüldüğünüzü duymak çok kötü.", "Başınız sağolsun.", "Sizinle üzülüyorum.", "Size nasıl yardımcı olabilirim?", "Sizi neşelendirecek bir müzik çalmak ister misiniz?"],
+            "angry": ["Kızdığınızı anlıyorum.", "Sakin olmaya çalışın.", "Nefes alıp verin.", "Size hak veriyorum.", "Sizi sakinleştirecek bir müzik çalmak ister misiniz?"],
+            "anxious": ["Kaygılandığınızı görüyorum.", "Endişelenmeyin.", "Her şey yoluna girecek.", "Size destek oluyorum.", "Sizi rahatlatacak bir müzik çalmak ister misiniz?"],
+            "neutral": ["Duygularınızı paylaştığınız için teşekkürler.", "Sizinle konuşmak güzel.", "Size bir soru sormak ister misiniz?", "Size bir şey önermek ister misiniz?", "Size bir müzik çalmak ister misiniz?"]
+        }
+        # Get the possible reactions for the given emotion category
+        possible_reactions = reactions[emotion_category]
+        # Randomly select one reaction from the possible reactions
+        reaction = random.choice(possible_reactions)
+        # Return the reaction
+        return reaction
+    # Get the reaction from the emotion category
+    reaction = get_reaction(emotion_category)
+    # Return the reaction
+    return reaction
+#Rıdvan Kaya and Ahmet Aydoğdu from the artificial intelligence team created this bot.
