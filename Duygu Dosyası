@@ -1,0 +1,82 @@
+# emotion.py
+# Kullanıcının duygu durumunu anlamak için gerekli kütüphaneler ve modüller
+import nltk
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+import speech_recognition as sr
+# Kullanıcının duygu durumunu anlamak için gerekli fonksiyonlar
+# Kullanıcının sesli girişini metne çeviren fonksiyon
+def voice_to_text():
+    # Ses tanıma motoru ve ayarları
+    r = sr.Recognizer()
+    with sr.Microphone() as source:
+        # Kullanıcıdan sesli giriş al
+        print("Lütfen konuşun...")
+        audio = r.listen(source)
+        try:
+            # Google Konuşma Tanıma API'sini kullanarak sesli girişi metne çevir
+            text = r.recognize_google(audio, language="tr-TR")
+            print("Söylediğiniz: " + text)
+            return text
+        except:
+            # Sesli girişi anlayamazsa hata mesajı ver
+            print("Üzgünüm, sizi anlayamadım. Lütfen tekrar deneyin.")
+            return None
+# Kullanıcının yazılı girişini alan fonksiyon
+def get_text_input():
+    # Kullanıcıdan yazılı giriş al
+    print("Lütfen yazın...")
+    text = input()
+    print("Yazdığınız: " + text)
+    return text
+# Kullanıcının girişini duygu durumu açısından analiz eden fonksiyon
+def analyze_emotion(text):
+    # Metni küçük harfe çevir
+    text = text.lower()
+    # Metni kelimelere ayır
+    words = word_tokenize(text)
+    # Duraklama kelimelerini ve noktalama işaretlerini kaldır
+    stop_words = stopwords.words("turkish")
+    punctuations = [".", ",", "!", "?", ":", ";", "-", "(", ")", "[", "]", "{", "}", '"', "'"]
+    filtered_words = [w for w in words if w not in stop_words and w not in punctuations]
+    # Filtrelenmiş kelimeleri birleştir
+    filtered_text = " ".join(filtered_words)
+    # SentimentIntensityAnalyzer nesnesi oluştur
+    sia = SentimentIntensityAnalyzer()
+    # Filtrelenmiş metni duygu durumu açısından puanla
+    scores = sia.polarity_scores(filtered_text)
+    # Puanlara göre duygu durumunu belirle
+    if scores["compound"] > 0.05:
+        emotion = "pozitif"
+    elif scores["compound"] < -0.05:
+        emotion = "negatif"
+    else:
+        emotion = "nötr"
+    # Duygu durumunu ve puanları döndür
+    return emotion, scores
+# Kullanıcının duygu durumunu anlamak için ana fonksiyon
+def understand_emotion():
+    # Kullanıcıya sesli veya yazılı giriş seçeneği sun
+    print("Botunuzla nasıl iletişim kurmak istersiniz?")
+    print("1. Sesli")
+    print("2. Yazılı")
+    choice = input()
+    # Kullanıcının seçimine göre giriş al
+    if choice == "1":
+        text = voice_to_text()
+    elif choice == "2":
+        text = get_text_input()
+    else:
+        print("Lütfen geçerli bir seçim yapın.")
+        return
+    # Girişin boş olup olmadığını kontrol et
+    if text:
+        # Girişi duygu durumu açısından analiz et
+        emotion, scores = analyze_emotion(text)
+        # Analiz sonucunu ekrana yazdır
+        print("Duygu durumunuz: " + emotion)
+        print("Puanlar: " + str(scores))
+    else:
+        print("Lütfen bir giriş yapın.")
+        return
